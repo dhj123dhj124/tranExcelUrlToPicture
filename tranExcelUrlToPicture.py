@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # encoding: utf-8
+#Author :dhj
+#Date:2020-06-01
 
 import wx
 import os
@@ -11,6 +13,14 @@ import xlsxwriter
 from PIL import Image
 import time
 import win32api,win32con
+
+'''
+    主要思路：
+        1、先打开文件，取得文件路径等信息
+        2、读取Excel，取得所有url地址
+        3、根据url地址，下载所有图片到本地
+        4、打开Excel，将图片插入的对应url地址后面一列
+'''
 
 class Frame(wx.Frame):                  # 定义GUI框架类
     # 框架初始化方法     
@@ -30,50 +40,47 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         self.saveAsBtn = wx.Button(self.panel, -1, '导入图片', pos=(480, 5))
         self.saveAsBtn.Bind(wx.EVT_BUTTON, self.ImportPicToExcel)
         
-        self.df = None
+        self.df = None #存储读取到的excel信息
         self.picDir = os.path.join(os.getcwd(),"downloadpics")   # 创建存储图片的文件夹
+        self.urlList = []
 
     # 从url链接下载图片命名为 fileName
-    def GetWeb(self,url, fileName):  
+    def SinglePicDownload(self,url, fileName):  
         r = requests.get(url)                             # 返回url请求的数据
         data = r.content
         with open(fileName, 'wb') as f:                  # 将数据存储在指定位置
             f.write(data)
 
     # 取得表格中所有图片的url地址
-    def GetPicUrls(self):
-        pat = r'http'    # 利用正则匹配出图片url
-        rec = re.compile(pat)
-        urlList = []  
-        self.df = pd.read_excel(self.fileName.GetValue())
+    def GetUrlsFromFile(self):
         for index,row in self.df.iterrows():
-            # print(type(row[0]),type(row[1]),row[1])
-            if row[1] and len(rec.match(row[1]).groups() ) > 0:
-                urlList.append((str(row[0]) + '_' + str(index),row[1]))         
-        return urlList
+            if row[1] and re.search('^http[\w,\W]*',row[1]):
+                self.urlList.append((index,str(row[0]) + '_' + str(index),row[1]))  
     
     #下载图片
     def DownloadPic(self, event):
-        urlList = self.GetPicUrls()
         self.loadPic.SetLabel(self.loadPic.Value + "开始下载图片！")
         threadList = []
-        for picName,picUrl in urlList:                    
+
+        #多线程下载图片
+        for index,picName,picUrl in self.urlList:                    
             try:
                 picName = os.path.join(self.picDir,picName + '.' + picUrl.split('.')[-1])
-                t = threading.Thread(target=self.GetWeb,args=(picUrl,picName))
+                t = threading.Thread(target=self.SinglePicDownload,args=(picUrl,picName))
                 threadList.append(t) 
             except Exception as err:
                 print(err)
                 print(picName,picUrl)
         for t in threadList: 
-            # self.loadPic.SetLabel(self.loadPic.Value + "\n开启线程：" + str(t))
             t.setDaemon(True)
             t.start()
+            #当活动子线程数大于500时，阻塞
             while threading.activeCount()>500:
                 time.sleep(5)
         for t in threadList:
             t.join
         
+        #当活动子线程数大于1时，等待。目的是防止有子线程未执行完（即可能图片没有全部下载完），影响后面一步的Excel图片插入.
         while threading.activeCount() > 1:
             self.loadPic.SetLabel(self.loadPic.Value + "\n剩余线程数：" + str(threading.activeCount()))
             time.sleep(5)
@@ -90,8 +97,16 @@ class Frame(wx.Frame):                  # 定义GUI框架类
             self.fileName.SetValue(dlg.GetPath())
             dlg.Destroy()  
         
+        #读取Excel内容
+        self.df = pd.read_excel(self.fileName.GetValue())
+        # print(self.df)
+        #获取Excel中的Url地址
+        self.GetUrlsFromFile()
+
+        #在可执行文件所在位置创建目录：用于存放下载的图片
         if not os.path.exists(self.picDir):
             os.mkdir(self.picDir)
+        print(self.urlList)
 
     def ImportPicToExcel(self, event):
         self.loadPic.SetLabel(self.loadPic.Value + "开始导入图片！")
@@ -120,6 +135,10 @@ class App(wx.App):                      # 定义应用程序类
         self.frame.Show(True)
         self.SetTopWindow(self.frame)   # 设置顶层框架
         return True
+
+def findUrlColumn(fileName):
+    column = 0
+    return column
 
 if __name__ == '__main__':              # 使用__name__检测当前模块
     app = App()
