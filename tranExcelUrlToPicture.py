@@ -43,20 +43,31 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         self.df = None #存储读取到的excel信息
         self.picDir = os.path.join(os.getcwd(),"downloadpics")   # 创建存储图片的文件夹
         self.urlList = []
+        self.column = -1
 
     # 从url链接下载图片命名为 fileName
-    def SinglePicDownload(self,url, fileName):  
-        r = requests.get(url)                             # 返回url请求的数据
-        data = r.content
+    def SinglePicDownload(self,url, fileName): 
+        try:
+            r = requests.get(url)
+            data = r.content
+        except Exception as err:
+            data = str(err)     #如果下载报错，将错误信息存入文件
         with open(fileName, 'wb') as f:                  # 将数据存储在指定位置
             f.write(data)
 
     # 取得表格中所有图片的url地址
     def GetUrlsFromFile(self):
         for index,row in self.df.iterrows():
-            if row[1] and re.search('^http[\w,\W]*',row[1]):
-                self.urlList.append((index,str(row[0]) + '_' + str(index),row[1]))  
+            if row[self.column] and re.search('^http[\w,\W]*',row[self.column]):
+                self.urlList.append((str(index),row[self.column]))  
     
+    #获取url地址所在列
+    def findUrlColumn(self):
+        for col in self.df.iloc[0:0]:
+            self.column += 1
+            if re.search('',str(col)):
+                break
+
     #下载图片
     def DownloadPic(self, event):
         self.loadPic.SetLabel(self.loadPic.Value + "开始下载图片！")
@@ -100,6 +111,10 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         #读取Excel内容
         self.df = pd.read_excel(self.fileName.GetValue())
         # print(self.df)
+        
+        #定位Url地址所在列
+        self.findUrlColumn()
+        
         #获取Excel中的Url地址
         self.GetUrlsFromFile()
 
@@ -136,10 +151,8 @@ class App(wx.App):                      # 定义应用程序类
         self.SetTopWindow(self.frame)   # 设置顶层框架
         return True
 
-def findUrlColumn(fileName):
-    column = 0
-    return column
-
 if __name__ == '__main__':              # 使用__name__检测当前模块
-    app = App()
-    app.MainLoop()    
+    # app = App()
+    # app.MainLoop()    
+    column = findUrlColumn("C:\\Users\\Sunshine\\Desktop\\url199.xlsx")
+    print(column)
