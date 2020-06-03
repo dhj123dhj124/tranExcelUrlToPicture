@@ -13,6 +13,8 @@ import xlsxwriter
 from PIL import Image
 import time
 import win32api,win32con
+from pathlib import Path
+
 
 '''
     主要思路：
@@ -44,6 +46,24 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         self.picDir = os.path.join(os.getcwd(),"downloadpics")   # 创建存储图片的文件夹
         self.urlList = []
         self.column = -1
+        self.pattern = '^http[\w,\W]*'  #url地址匹配
+    
+    #获取url地址所在列
+    def FindUrlColumn(self):
+        if self.df.shape[0] > 0: #至少需要有一行记录
+            for col in range(self.df.shape[1]):
+                if re.search(self.pattern,str(self.df.iloc[0,col])):
+                    self.column = col
+            if self.column == -1:
+                win32api.MessageBox(0, "请在第一行展现Url地址，以判断Url地址所在列！", "提醒",win32con.MB_OK)  
+        else:
+            win32api.MessageBox(0, "请确保表格中至少有一行记录！", "提醒",win32con.MB_OK)  
+
+    # 取得表格中所有图片的url地址
+    def GetUrlsFromFile(self):
+        for index,row in self.df.iterrows():
+            if row[self.column] and re.search(self.pattern,row[self.column]):
+                self.urlList.append((str(index),row[self.column]))  
 
     # 从url链接下载图片命名为 fileName
     def SinglePicDownload(self,url, fileName): 
@@ -54,49 +74,6 @@ class Frame(wx.Frame):                  # 定义GUI框架类
             data = str(err)     #如果下载报错，将错误信息存入文件
         with open(fileName, 'wb') as f:                  # 将数据存储在指定位置
             f.write(data)
-
-    # 取得表格中所有图片的url地址
-    def GetUrlsFromFile(self):
-        for index,row in self.df.iterrows():
-            if row[self.column] and re.search('^http[\w,\W]*',row[self.column]):
-                self.urlList.append((str(index),row[self.column]))  
-    
-    #获取url地址所在列
-    def findUrlColumn(self):
-        for col in self.df.iloc[0:0]:
-            self.column += 1
-            if re.search('',str(col)):
-                break
-
-    #下载图片
-    def DownloadPic(self, event):
-        self.loadPic.SetLabel(self.loadPic.Value + "开始下载图片！")
-        threadList = []
-
-        #多线程下载图片
-        for index,picName,picUrl in self.urlList:                    
-            try:
-                picName = os.path.join(self.picDir,picName + '.' + picUrl.split('.')[-1])
-                t = threading.Thread(target=self.SinglePicDownload,args=(picUrl,picName))
-                threadList.append(t) 
-            except Exception as err:
-                print(err)
-                print(picName,picUrl)
-        for t in threadList: 
-            t.setDaemon(True)
-            t.start()
-            #当活动子线程数大于500时，阻塞
-            while threading.activeCount()>500:
-                time.sleep(5)
-        for t in threadList:
-            t.join
-        
-        #当活动子线程数大于1时，等待。目的是防止有子线程未执行完（即可能图片没有全部下载完），影响后面一步的Excel图片插入.
-        while threading.activeCount() > 1:
-            self.loadPic.SetLabel(self.loadPic.Value + "\n剩余线程数：" + str(threading.activeCount()))
-            time.sleep(5)
-        self.loadPic.SetLabel(self.loadPic.Value + "\n下载图片完毕！")
-        win32api.MessageBox(0, "下载图片完毕！", "提醒",win32con.MB_OK)   
 
     def OnOpen(self, event):
         dlg = wx.FileDialog(self, message='打开文件',
@@ -110,10 +87,11 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         
         #读取Excel内容
         self.df = pd.read_excel(self.fileName.GetValue())
+        self.df.fillna("填充",inplace= True)
         # print(self.df)
         
         #定位Url地址所在列
-        self.findUrlColumn()
+        self.FindUrlColumn()
         
         #获取Excel中的Url地址
         self.GetUrlsFromFile()
@@ -121,38 +99,75 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         #在可执行文件所在位置创建目录：用于存放下载的图片
         if not os.path.exists(self.picDir):
             os.mkdir(self.picDir)
-        print(self.urlList)
+        # print(self.urlList)
+        self.loadPic.SetLabel(self.loadPic.Value + "文件已打开，请开始转换！\n")
+
+    #下载图片
+    def DownloadPic(self, event):
+        self.loadPic.SetLabel(self.loadPic.Value + "开始下载图片！\n")
+        threadList = []
+
+        #多线程下载图片
+        for picName,picUrl in self.urlList:                    
+            try:
+                picName = os.path.join(self.picDir,picName + '.' + picUrl.split('.')[-1])
+                t = threading.Thread(target=self.SinglePicDownload,args=(picUrl,picName))
+                threadList.append(t) 
+            except Exception as err:
+                print(picName,picUrl,err)
+        for t in threadList: 
+            t.setDaemon(True)
+            t.start()
+            #当活动子线程数大于500时，阻塞
+            while threading.activeCount()>500:
+                time.sleep(1)
+        for t in threadList:
+            t.join
+        
+        #当活动子线程数大于1时，等待。目的是防止有子线程未执行完（即可能图片没有全部下载完），影响后面一步的Excel图片插入.
+        while threading.activeCount() > 1:
+            self.loadPic.SetLabel(self.loadPic.Value + "剩余线程数：" + str(threading.activeCount()) + "\n")
+            time.sleep(1)
+        self.loadPic.SetLabel(self.loadPic.Value + "下载图片完毕！\n")
+        win32api.MessageBox(0, "下载图片完毕！", "提醒",win32con.MB_OK)  
 
     def ImportPicToExcel(self, event):
-        self.loadPic.SetLabel(self.loadPic.Value + "开始导入图片！")
-        with xlsxwriter.Workbook(self.fileName.GetValue()) as book:
+        self.loadPic.SetLabel(self.loadPic.Value + "开始导入图片！\n")
+        newFileName = os.path.join(os.path.split(self.fileName.GetValue())[0],"新" + os.path.split(self.fileName.GetValue())[1]) #创建新文件
+        with xlsxwriter.Workbook(newFileName) as book:
             sheet = book.add_worksheet('Sheet1')
-            sheet.set_column("C:C",10) #设置列宽
-            for index,row in self.df.iterrows():
-                sheet.set_row(index,60) #设置行高
-                picPath = os.path.join(self.picDir,row[0] + '_' + str(index) + '.' + row[1].split('.')[-1])
-                self.loadPic.SetLabel(self.loadPic.Value + "\n正在导入图片：" + picPath + "……")
-                try:                    
-                    with Image.open(picPath) as img:
-                        sheet.write('A' + str(index+1),row[0])
-                        sheet.write('B' + str(index+1),row[1])
-                        sheet.insert_image('C' + str(index+1),picPath,{'y_offset': 3,'x_scale': 75/img.width, 'y_scale': 75/img.height,'url': row[1]}) #插入图片，同时设置纵向偏移及缩放比例
-                except Exception as err:                    
-                    sheet.write('A' + str(index+1),row[0])
-                    sheet.write('B' + str(index+1),row[1])
-                    sheet.write('C' + str(index+1),"图片未下载成功：" + str(err))
-        self.loadPic.SetLabel(self.loadPic.Value + "\n导入图片完毕！")
+            sheet.set_column(self.column + 1,self.column + 1,10) #地址所在列加1列用于放置图片，故增加宽度
+            #处理列名
+            for i in range(self.column + 1):
+                sheet.write(0,i,self.df.columns.values.tolist()[i])
+            sheet.write(0,self.column+1,"插入图片")
+            for i in range(self.df.shape[1] - self.column - 1):
+                sheet.write(0,i + self.column + 2,self.df.iloc[0,i + self.column + 1])     
+
+            for row in range(1,self.df.shape[0]+1):  #按行依次插入：图片前self.column+1列，图片后df.shape[1]-self.column-1列，图片列
+                picPath = os.path.join(self.picDir,str(row-1) + '.' + self.df.iloc[row-1,self.column].split('.')[-1])
+                for col1 in range(self.column + 1):  #插入url所在位置前的列（含url列）
+                    sheet.write(row,col1,self.df.iloc[row-1,col1])                
+                for col2 in range(self.df.shape[1] - self.column - 1):  #插入url列所在位置后的列（不含url列）
+                    sheet.write(row,col2 + self.column + 2,self.df.iloc[row-1,col2 + self.column + 1])                
+                if Path(picPath).is_file():   #如果文件存在则插入图片
+                    try:                    
+                        with Image.open(picPath) as img:
+                            sheet.insert_image(row,self.column + 1,picPath,{'y_offset': 3,'x_scale': 75/img.width, 'y_scale': 75/img.height,'url': self.df.iloc[row-1,self.column]}) #插入图片，同时设置纵向偏移及缩放比例                                                        
+                            self.loadPic.SetLabel(self.loadPic.Value + "图片" + picPath + ",导入完毕！\n")
+                            sheet.set_row(row,60) #设置行高
+                    except Exception as err:                    
+                        sheet.write(row,self.column + 1,"图片未下载成功：" + str(err))                        
+        self.loadPic.SetLabel(self.loadPic.Value + "导入图片完毕！\n")
         win32api.MessageBox(0, "导入图片完毕！", "提醒",win32con.MB_OK)
 
-class App(wx.App):                      # 定义应用程序类
-    def OnInit(self):                   # 类初始化方法
+class App(wx.App):                      # 定义应用类
+    def OnInit(self):
         self.frame = Frame()
         self.frame.Show(True)
-        self.SetTopWindow(self.frame)   # 设置顶层框架
+        self.SetTopWindow(self.frame)   # 设置窗口
         return True
 
-if __name__ == '__main__':              # 使用__name__检测当前模块
-    # app = App()
-    # app.MainLoop()    
-    column = findUrlColumn("C:\\Users\\Sunshine\\Desktop\\url199.xlsx")
-    print(column)
+if __name__ == '__main__':
+    app = App()
+    app.MainLoop()    
