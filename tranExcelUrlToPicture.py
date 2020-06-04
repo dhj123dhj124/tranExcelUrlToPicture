@@ -75,6 +75,10 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         with open(fileName, 'wb') as f:                  # 将数据存储在指定位置
             f.write(data)
 
+    def PrintLog(self,log):
+        log = self.loadPic.Value + log + "\n"
+        self.loadPic.SetLabel(log)
+
     def OnOpen(self, event):
         dlg = wx.FileDialog(self, message='打开文件',
                             defaultDir='',
@@ -100,11 +104,11 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         if not os.path.exists(self.picDir):
             os.mkdir(self.picDir)
         # print(self.urlList)
-        self.loadPic.SetLabel(self.loadPic.Value + "文件已打开，请开始转换！\n")
+        self.PrintLog("文件已打开，请开始转换！")
 
     #下载图片
     def DownloadPic(self, event):
-        self.loadPic.SetLabel(self.loadPic.Value + "开始下载图片！\n")
+        self.PrintLog("开始下载图片！")
         threadList = []
 
         #多线程下载图片
@@ -124,15 +128,15 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         for t in threadList:
             t.join
         
+        self.PrintLog("剩余线程数：" + str(threading.activeCount()))
         #当活动子线程数大于1时，等待。目的是防止有子线程未执行完（即可能图片没有全部下载完），影响后面一步的Excel图片插入.
         while threading.activeCount() > 1:
-            self.loadPic.SetLabel(self.loadPic.Value + "剩余线程数：" + str(threading.activeCount()) + "\n")
             time.sleep(1)
-        self.loadPic.SetLabel(self.loadPic.Value + "下载图片完毕！\n")
+        self.PrintLog("下载图片完毕！")
         win32api.MessageBox(0, "下载图片完毕！", "提醒",win32con.MB_OK)  
 
     def ImportPicToExcel(self, event):
-        self.loadPic.SetLabel(self.loadPic.Value + "开始导入图片！\n")
+        self.PrintLog("开始导入图片！")
         newFileName = os.path.join(os.path.split(self.fileName.GetValue())[0],"新" + os.path.split(self.fileName.GetValue())[1]) #创建新文件
         with xlsxwriter.Workbook(newFileName) as book:
             sheet = book.add_worksheet('Sheet1')
@@ -153,12 +157,12 @@ class Frame(wx.Frame):                  # 定义GUI框架类
                 if Path(picPath).is_file():   #如果文件存在则插入图片
                     try:                    
                         with Image.open(picPath) as img:
-                            sheet.insert_image(row,self.column + 1,picPath,{'y_offset': 3,'x_scale': 75/img.width, 'y_scale': 75/img.height,'url': self.df.iloc[row-1,self.column]}) #插入图片，同时设置纵向偏移及缩放比例                                                        
-                            self.loadPic.SetLabel(self.loadPic.Value + "图片" + picPath + ",导入完毕！\n")
+                            sheet.insert_image(row,self.column + 1,picPath,{'y_offset': 3,'x_scale': 75/img.width, 'y_scale': 75/img.height,'url': self.df.iloc[row-1,self.column]}) #插入图片，同时设置纵向偏移及缩放比例                                                                                    
+                            self.PrintLog("图片" + picPath + ",导入完毕！")
                             sheet.set_row(row,60) #设置行高
                     except Exception as err:                    
                         sheet.write(row,self.column + 1,"图片未下载成功：" + str(err))                        
-        self.loadPic.SetLabel(self.loadPic.Value + "导入图片完毕！\n")
+        self.PrintLog("导入图片完毕！")
         win32api.MessageBox(0, "导入图片完毕！", "提醒",win32con.MB_OK)
 
 class App(wx.App):                      # 定义应用类
