@@ -118,7 +118,6 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         self.df = pd.read_excel(self.fileName.GetValue())
         self.df.fillna(" ",inplace= True)
         self.percent = 0 if self.df.shape[0] == 0 else 100/self.df.shape[0]
-        # print(self.df)
         
         #定位Url地址所在列
         self.FindUrlColumn()
