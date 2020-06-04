@@ -42,13 +42,13 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         self.fileName = wx.TextCtrl(self.panel,pos=(5,5),size=(275,25))
 
         self.wildcard='表格文件(*.xlsx)|*.xlsx'
-        self.openBtn = wx.Button(self.panel, -1, '选取Excel', pos=(5, 45))
+        self.openBtn = wx.Button(self.panel, -1, '选取Excel', pos=(5, 45),style=wx.BORDER_NONE)
         self.openBtn.Bind(wx.EVT_BUTTON, self.OnOpen)
 
-        self.downLoadBtn = wx.Button(self.panel, -1, '下载图片', pos=(105, 45))
+        self.downLoadBtn = wx.Button(self.panel, -1, '下载图片', pos=(105, 45),style=wx.BORDER_NONE)
         self.downLoadBtn.Bind(wx.EVT_BUTTON, self.DownloadPic)
 
-        self.importBtn = wx.Button(self.panel, -1, '导入Excel', pos=(205, 45))
+        self.importBtn = wx.Button(self.panel, -1, '导入Excel', pos=(205, 45),style=wx.BORDER_NONE)
         self.importBtn.Bind(wx.EVT_BUTTON, self.ImportPicToExcel)
         
         self.df = None #存储读取到的excel信息
@@ -62,9 +62,9 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         
         self.statusbar = customStatusBar(self)
         self.SetStatusBar(self.statusbar)
-        self.count = 0
-        self.percent = 0
-        self.title = ""
+        self.count = 0 #下载图片的数量
+        self.percent = 0 #每个图片占的百分比 100/总图片数
+        self.currentAction = ""     #动作
 
     #获取url地址所在列
     def FindUrlColumn(self):
@@ -100,7 +100,8 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         if self.count == self.df.shape[0]: #当处理完毕时，停止定时器
             self.timer.Stop()
             time.sleep(0.1)
-            win32api.MessageBox(0, self.title + "完成！", "提醒",win32con.MB_OK) 
+            self.count = 0
+            win32api.MessageBox(0, self.currentAction + "完成！", "提醒",win32con.MB_OK) 
             self.statusbar.Hide()            
 
     def OnOpen(self, event):
@@ -141,13 +142,14 @@ class Frame(wx.Frame):                  # 定义GUI框架类
 
     #下载图片
     def DownloadPic(self, event):
-        self.title = self.downLoadBtn.GetLabelText()
+        self.currentAction = self.downLoadBtn.GetLabelText()
         self.timer.Start(1000)
         t = threading.Thread(target=self.MulProcess) #单独开一个线程处理
         t.start()
 
     def ImportPicToExcel(self, event):
-        self.title = self.importBtn.GetLabelText()
+        self.currentAction = self.importBtn.GetLabelText()
+        self.timer.Start(1000)
         newFileName = os.path.join(os.path.split(self.fileName.GetValue())[0],"新" + os.path.split(self.fileName.GetValue())[1]) #创建新文件
         with xlsxwriter.Workbook(newFileName) as book:
             sheet = book.add_worksheet('Sheet1')
@@ -172,6 +174,7 @@ class Frame(wx.Frame):                  # 定义GUI框架类
                             sheet.set_row(row,60) #设置行高
                     except Exception as err:                    
                         sheet.write(row,self.column + 1,"图片未下载成功：" + str(err))    
+                self.count = row
 
 class App(wx.App):                      # 定义应用类
     def OnInit(self):
