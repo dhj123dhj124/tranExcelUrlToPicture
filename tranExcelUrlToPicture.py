@@ -14,6 +14,7 @@ from PIL import Image
 import time
 import win32api,win32con
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 '''
@@ -27,19 +28,19 @@ from pathlib import Path
 class Frame(wx.Frame):                  # 定义GUI框架类
     # 框架初始化方法     
     def __init__(self, parent=None, id=-1, pos=wx.DefaultPosition,title='转换Excel中url为图片'):
-        wx.Frame.__init__(self, parent, id, title,pos, size=(1200, 450))
+        wx.Frame.__init__(self, parent, id, title,pos, size=(800, 450))
         self.panel = wx.Panel(self)
         self.fileName = wx.TextCtrl(self.panel,pos=(5,5),size=(310,25))
-        self.loadPic = wx.TextCtrl(self.panel,pos=(5,45),size=(1150,325),style=wx.TE_MULTILINE|wx.TE_RICH2)
+        self.loadPic = wx.TextCtrl(self.panel,pos=(5,45),size=(780,325),style=wx.TE_MULTILINE|wx.TE_RICH2)
 
         self.wildcard='表格文件(*.xlsx)|*.xlsx'
-        self.openBtn = wx.Button(self.panel, -1, '打开', pos=(320, 5))
+        self.openBtn = wx.Button(self.panel, -1, '打开Excel', pos=(320, 5))
         self.openBtn.Bind(wx.EVT_BUTTON, self.OnOpen)
 
         self.saveAsBtn = wx.Button(self.panel, -1, '下载图片', pos=(400, 5))
         self.saveAsBtn.Bind(wx.EVT_BUTTON, self.DownloadPic)
 
-        self.saveAsBtn = wx.Button(self.panel, -1, '导入图片', pos=(480, 5))
+        self.saveAsBtn = wx.Button(self.panel, -1, '导入Excel', pos=(480, 5))
         self.saveAsBtn.Bind(wx.EVT_BUTTON, self.ImportPicToExcel)
         
         self.df = None #存储读取到的excel信息
@@ -74,6 +75,7 @@ class Frame(wx.Frame):                  # 定义GUI框架类
             data = str(err)     #如果下载报错，将错误信息存入文件
         with open(fileName, 'wb') as f:                  # 将数据存储在指定位置
             f.write(data)
+        return url
 
     def PrintLog(self,log):
         log = self.loadPic.Value + log + "\n"
@@ -91,7 +93,7 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         
         #读取Excel内容
         self.df = pd.read_excel(self.fileName.GetValue())
-        self.df.fillna("填充",inplace= True)
+        self.df.fillna(" ",inplace= True)
         # print(self.df)
         
         #定位Url地址所在列
@@ -109,34 +111,22 @@ class Frame(wx.Frame):                  # 定义GUI框架类
     #下载图片
     def DownloadPic(self, event):
         self.PrintLog("开始下载图片！")
-        threadList = []
-
-        #多线程下载图片
-        for picName,picUrl in self.urlList:                    
-            try:
+        with ThreadPoolExecutor(max_workers = 100) as tpe:
+            threadList = []
+            for picName,picUrl in self.urlList:
                 picName = os.path.join(self.picDir,picName + '.' + picUrl.split('.')[-1])
-                t = threading.Thread(target=self.SinglePicDownload,args=(picUrl,picName))
-                threadList.append(t) 
-            except Exception as err:
-                print(picName,picUrl,err)
-        for t in threadList: 
-            t.setDaemon(True)
-            t.start()
-            #当活动子线程数大于500时，阻塞
-            while threading.activeCount()>500:
-                time.sleep(1)
-        for t in threadList:
-            t.join
-        
-        self.PrintLog("剩余线程数：" + str(threading.activeCount()))
-        #当活动子线程数大于1时，等待。目的是防止有子线程未执行完（即可能图片没有全部下载完），影响后面一步的Excel图片插入.
-        while threading.activeCount() > 1:
-            time.sleep(1)
+                t = tpe.submit(self.SinglePicDownload,picUrl,picName)
+                threadList.append(t)
+
+            for com in as_completed(threadList):
+                self.PrintLog("图片 " + com.result() + " 已下载！")
+                self.panel.Refresh()
+
         self.PrintLog("下载图片完毕！")
         win32api.MessageBox(0, "下载图片完毕！", "提醒",win32con.MB_OK)  
 
     def ImportPicToExcel(self, event):
-        self.PrintLog("开始导入图片！")
+        self.PrintLog("开始导入Excel！")
         newFileName = os.path.join(os.path.split(self.fileName.GetValue())[0],"新" + os.path.split(self.fileName.GetValue())[1]) #创建新文件
         with xlsxwriter.Workbook(newFileName) as book:
             sheet = book.add_worksheet('Sheet1')
@@ -144,7 +134,7 @@ class Frame(wx.Frame):                  # 定义GUI框架类
             #处理列名
             for i in range(self.column + 1):
                 sheet.write(0,i,self.df.columns.values.tolist()[i])
-            sheet.write(0,self.column+1,"插入图片")
+            sheet.write(0,self.column+1,"导入图片")
             for i in range(self.df.shape[1] - self.column - 1):
                 sheet.write(0,i + self.column + 2,self.df.iloc[0,i + self.column + 1])     
 
@@ -158,12 +148,12 @@ class Frame(wx.Frame):                  # 定义GUI框架类
                     try:                    
                         with Image.open(picPath) as img:
                             sheet.insert_image(row,self.column + 1,picPath,{'y_offset': 3,'x_scale': 75/img.width, 'y_scale': 75/img.height,'url': self.df.iloc[row-1,self.column]}) #插入图片，同时设置纵向偏移及缩放比例                                                                                    
-                            self.PrintLog("图片" + picPath + ",导入完毕！")
+                            self.PrintLog("图片 " + picPath + " 已导入！")
                             sheet.set_row(row,60) #设置行高
                     except Exception as err:                    
                         sheet.write(row,self.column + 1,"图片未下载成功：" + str(err))                        
-        self.PrintLog("导入图片完毕！")
-        win32api.MessageBox(0, "导入图片完毕！", "提醒",win32con.MB_OK)
+        self.PrintLog("导入Excel完毕！")
+        win32api.MessageBox(0, "导入Excel完毕！", "提醒",win32con.MB_OK)
 
 class App(wx.App):                      # 定义应用类
     def OnInit(self):
