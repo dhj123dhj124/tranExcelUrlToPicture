@@ -2,7 +2,9 @@
 __pycache__/tranExcelUrlToPicture.cpython-37.pyc
 build/tranExcelUrlToPicture/Analysis-00.toc
 build/tranExcelUrlToPicture/base_library.zip
+build/tranExcelUrlToPicture/EXE-00.toc
 build/tranExcelUrlToPicture/PKG-00.pkg
+build/tranExcelUrlToPicture/PKG-00.toc
 build/tranExcelUrlToPicture/PYZ-00.pyz
 build/tranExcelUrlToPicture/PYZ-00.toc
 build/tranExcelUrlToPicture/tranExcelUrlToPicture.exe.manifest
@@ -12,6 +14,3 @@ build/tranExcelUrlToPicture/warn-tranExcelUrlToPicture.txt
 build/tranExcelUrlToPicture/xref-tranExcelUrlToPicture.html
 SkinBox.ico
 tranExcelUrlToPicture.spec
-dist/tranExcelUrlToPicture.exe
-build/tranExcelUrlToPicture/PKG-00.toc
-build/tranExcelUrlToPicture/EXE-00.toc

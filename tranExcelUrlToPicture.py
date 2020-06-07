@@ -97,7 +97,7 @@ class Frame(wx.Frame):                  # 定义GUI框架类
     def OnTimer(self,evt):
         self.statusbar.gauge.SetValue(self.count * self.percent)
         # print(self.count,self.percent,self.count * self.percent)
-        if self.count == self.df.shape[0]: #当处理完毕时，停止定时器
+        if self.count == self.df.shape[0] or threading.activeCount() == 1: #当处理完毕时，停止定时器
             self.timer.Stop()
             time.sleep(0.1)
             self.count = 0
@@ -147,12 +147,11 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         t.start()
 
     def ImportPicToExcel(self, event):
-        self.currentAction = self.importBtn.GetLabelText()
-        self.timer.Start(1000)
         newFileName = os.path.join(os.path.split(self.fileName.GetValue())[0],"新" + os.path.split(self.fileName.GetValue())[1]) #创建新文件
         with xlsxwriter.Workbook(newFileName) as book:
             sheet = book.add_worksheet('Sheet1')
             sheet.set_column(self.column + 1,self.column + 1,10) #地址所在列加1列用于放置图片，故增加宽度
+            sheet.set_column(self.column,self.column,80) #地址所在列加1列用于放置图片，故增加宽度
             #处理列名
             for i in range(self.column + 1):
                 sheet.write(0,i,self.df.columns.values.tolist()[i])
@@ -169,12 +168,15 @@ class Frame(wx.Frame):                  # 定义GUI框架类
                 if Path(picPath).is_file():   #如果文件存在则插入图片
                     try:                    
                         with Image.open(picPath) as img:
-                            sheet.insert_image(row,self.column + 1,picPath,{'y_offset': 3,'x_scale': 75/img.width, 'y_scale': 75/img.height,'url': self.df.iloc[row-1,self.column]}) #插入图片，同时设置纵向偏移及缩放比例                                                                                    
-                            sheet.set_row(row,60) #设置行高
+                            try:
+                                sheet.insert_image(row,self.column + 1,picPath,{'y_offset': 3,'x_scale': 75/img.width, 'y_scale': 75/img.height,'url': self.df.iloc[row-1,self.column]}) #插入图片，同时设置纵向偏移及缩放比例                                                                                    
+                                sheet.set_row(row,60) #设置行高
+                            except Exception as imgErr:
+                                print("图片导入异常：",imgErr)                            
                     except Exception as err:                    
-                        sheet.write(row,self.column + 1,"图片未下载成功：" + str(err))    
-                self.count = row
+                        sheet.write(row,self.column + 1,"打开图片异常" + str(err))
 
+        win32api.MessageBox(0, self.currentAction + "完成！", "提醒",win32con.MB_OK) 
 class App(wx.App):                      # 定义应用类
     def OnInit(self):
         self.frame = Frame()
