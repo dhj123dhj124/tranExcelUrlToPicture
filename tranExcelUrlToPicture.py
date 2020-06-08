@@ -156,15 +156,15 @@ class Frame(wx.Frame):                  # 定义GUI框架类
             for i in range(self.column + 1):
                 sheet.write(0,i,self.df.columns.values.tolist()[i])
             sheet.write(0,self.column+1,"导入图片")
-            for i in range(self.df.shape[1] - self.column - 1):
-                sheet.write(0,i + self.column + 2,self.df.iloc[0,i + self.column + 1])     
+            for i in range(self.column+2,self.df.shape[1] + 1):
+                sheet.write(0,i,self.df.columns.values.tolist()[i-1])     
 
-            for row in range(1,self.df.shape[0]+1):  #按行依次插入：图片前self.column+1列，图片后df.shape[1]-self.column-1列，图片列
+            for row in range(1,self.df.shape[0] + 1):  #按行依次插入：图片前self.column+1列，图片后df.shape[1]-self.column-1列，图片列
                 picPath = os.path.join(self.picDir,str(row-1) + '.' + self.df.iloc[row-1,self.column].split('.')[-1])
                 for col1 in range(self.column + 1):  #插入url所在位置前的列（含url列）
                     sheet.write(row,col1,self.df.iloc[row-1,col1])                
-                for col2 in range(self.df.shape[1] - self.column - 1):  #插入url列所在位置后的列（不含url列）
-                    sheet.write(row,col2 + self.column + 2,self.df.iloc[row-1,col2 + self.column + 1])                
+                for col2 in range(self.column+2,self.df.shape[1] + 1):  #插入url列所在位置后的列（不含url列）
+                    sheet.write(row,col2,self.df.iloc[row-1,col2 - 1])                
                 if Path(picPath).is_file():   #如果文件存在则插入图片
                     try:                    
                         with Image.open(picPath) as img:
