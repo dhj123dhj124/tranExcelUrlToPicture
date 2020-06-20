@@ -63,6 +63,7 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         self.statusbar = customStatusBar(self)
         self.SetStatusBar(self.statusbar)
         self.count = 0 #下载图片的数量
+        self.invalidUrlCount = -1 #无效Url的数量
         self.percent = 0 #每个图片占的百分比 100/总图片数
         self.currentAction = ""     #动作
 
@@ -94,16 +95,18 @@ class Frame(wx.Frame):                  # 定义GUI框架类
             f.write(data)
         return url
 
+    def StopTimer(self):    
+        self.timer.Stop()
+        time.sleep(0.1)
+        self.statusbar.Hide()  
+
     def OnTimer(self,evt):
         self.statusbar.gauge.SetValue(self.count * self.percent)
-        # print(self.count,self.percent,self.count * self.percent)
-        if self.count == self.df.shape[0] or threading.activeCount() == 1: #当处理完毕时，停止定时器
-            self.timer.Stop()
-            time.sleep(0.1)
-            self.count = 0
-            win32api.MessageBox(0, self.currentAction + "完成！", "提醒",win32con.MB_OK) 
-            self.statusbar.Hide()            
-
+        # print(self.count,self.invalidUrlCount,self.df.shape[0],len(self.urlList),self.percent,self.count * self.percent,threading.activeCount())
+        if self.count == self.df.shape[0] - self.invalidUrlCount or threading.activeCount() == 1: #当处理完毕时，停止定时器
+            self.StopTimer()
+            win32api.MessageBox(0, "下载图片完成！", "提醒",win32con.MB_OK)
+    
     def OnOpen(self, event):
         dlg = wx.FileDialog(self, message='打开文件',
                             defaultDir='',
@@ -124,12 +127,13 @@ class Frame(wx.Frame):                  # 定义GUI框架类
         
         #获取Excel中的Url地址
         self.GetUrlsFromFile()
+        self.invalidUrlCount = self.df.shape[0] - len(self.urlList) #无效Url计数 = Excel表所有行数-不含Url值的行数
 
         #在可执行文件所在位置创建目录：用于存放下载的图片
         if not os.path.exists(self.picDir):
             os.mkdir(self.picDir)
 
-    def MulProcess(self):        
+    def MultiProcess(self):        
         with ThreadPoolExecutor(max_workers = 50) as tpe:
             threadList = []
             for picName,picUrl in self.urlList:
@@ -143,10 +147,12 @@ class Frame(wx.Frame):                  # 定义GUI框架类
     def DownloadPic(self, event):
         self.currentAction = self.downLoadBtn.GetLabelText()
         self.timer.Start(1000)
-        t = threading.Thread(target=self.MulProcess) #单独开一个线程处理
+        t = threading.Thread(target=self.MultiProcess) #单独开一个线程处理
         t.start()
 
     def ImportPicToExcel(self, event):
+        self.StopTimer()
+        self.count = 0
         newFileName = os.path.join(os.path.split(self.fileName.GetValue())[0],"新" + os.path.split(self.fileName.GetValue())[1]) #创建新文件
         with xlsxwriter.Workbook(newFileName) as book:
             sheet = book.add_worksheet('Sheet1')
@@ -176,7 +182,7 @@ class Frame(wx.Frame):                  # 定义GUI框架类
                     except Exception as err:                    
                         sheet.write(row,self.column + 1,"打开图片异常" + str(err))
 
-        win32api.MessageBox(0, self.currentAction + "完成！", "提醒",win32con.MB_OK) 
+        win32api.MessageBox(0, "导入Excel完成！", "提醒",win32con.MB_OK) 
 class App(wx.App):                      # 定义应用类
     def OnInit(self):
         self.frame = Frame()
